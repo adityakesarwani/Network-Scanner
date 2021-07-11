@@ -6,7 +6,7 @@ import argparse
 import typing
 
 
-async def do_ping(host: str, timeout: float) -> str:
+async def do_ping(host: str, timeout: float, sem: asyncio.locks.Semaphore) -> str:
     """do_ping() is responsible for pinging the hosts"""
     await sem.acquire()
     try:
@@ -30,16 +30,19 @@ def get_hosts(net: str) -> typing.List[str]:
     return hosts
 
 
-async def execute(hosts: typing.List[str], timeout: float) -> None:
-    """execute() takes care of concurrency and asyncio """
+async def execute(hosts: typing.List[str], timeout: float, sem: asyncio.locks.Semaphore) -> None:
+    """execute() takes care of concurrency and asyncio and prints the output in the external file"""
     tasks = []
+
+    # opening a txt file for writing the output of ping
+    srcfile = open('output.txt', 'w')
+
     for host in hosts:
-        tasks.append(asyncio.ensure_future(do_ping(host, timeout)))
+        tasks.append(asyncio.ensure_future(do_ping(host, timeout, sem)))
 
     delays = await asyncio.gather(*tasks)
     for delay in delays:
         print(delay, file=srcfile)
-    srcfile.close()
 
 
 def set_params(net: str, concurrency: int, timeout: float) -> typing.Tuple[str, int, float]:
@@ -55,8 +58,7 @@ def set_params(net: str, concurrency: int, timeout: float) -> typing.Tuple[str, 
         set_timeout = timeout
     return (set_net, set_concurrency, set_timeout)
 
-
-if __name__ == "__main__":
+def main():
     start_time = time.time()
 
     # fetching command line inputs and storing them in the variables
@@ -70,13 +72,13 @@ if __name__ == "__main__":
     # fetching all the hosts within a network
     hosts = get_hosts(net)
 
-    # opening a txt file for writing the output of ping
-    srcfile = open('output.txt', 'w')
-
     # setting up the concurrency level of the execution
     sem = asyncio.Semaphore(concurrency)
 
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(execute(hosts, timeout))
+    loop.run_until_complete(execute(hosts, timeout, sem))
 
     print("--- %s seconds ---" % (time.time() - start_time))
+
+if __name__ == "__main__":
+    main()
