@@ -6,11 +6,12 @@ import argparse
 import typing
 
 
-async def do_ping(host: str, timeout: float, sem: asyncio.locks.Semaphore) -> str:
+async def do_ping(host: str, timeout: float, sem: asyncio.locks.Semaphore, active_hosts: typing.List) -> str:
     """do_ping() is responsible for pinging the hosts"""
     await sem.acquire()
     try:
         delay = await aioping.ping(host, timeout=timeout) * 1000
+        active_hosts.append("Ping response in %.6s ms from " % delay + host)
         return "Ping response in %s ms from " % delay + host
 
     except TimeoutError:
@@ -22,15 +23,18 @@ async def do_ping(host: str, timeout: float, sem: asyncio.locks.Semaphore) -> st
 
 def get_hosts(net: str) -> typing.List[str]:
     """get_hosts() will return all the hosts within a network"""
+    print("Network to scan:",net)
     network = ipaddress.IPv4Network(net)
     hosts_obj = network.hosts()
+    print("Prefix to scan:",network.prefixlen)
     hosts = []
     for i in hosts_obj:
         hosts.append(str(i))
+    print("Number of hosts to scan:",len(hosts))
     return hosts
 
 
-async def execute(hosts: typing.List[str], timeout: float, sem: asyncio.locks.Semaphore) -> None:
+async def execute(hosts: typing.List[str], timeout: float, sem: asyncio.locks.Semaphore, active_hosts: typing.List) -> None:
     """execute() takes care of concurrency and asyncio and prints the output in the external file"""
     tasks = []
 
@@ -38,8 +42,8 @@ async def execute(hosts: typing.List[str], timeout: float, sem: asyncio.locks.Se
     srcfile = open('output.txt', 'w')
 
     for host in hosts:
-        tasks.append(asyncio.ensure_future(do_ping(host, timeout, sem)))
-
+        tasks.append(asyncio.ensure_future(do_ping(host, timeout, sem, active_hosts)))
+    print("Scanning the hosts... ")
     delays = await asyncio.gather(*tasks)
     for delay in delays:
         print(delay, file=srcfile)
@@ -74,9 +78,14 @@ def main():
 
     # setting up the concurrency level of the execution
     sem = asyncio.Semaphore(concurrency)
-
+    active_hosts=[]
     loop = asyncio.get_event_loop()
-    loop.run_until_complete(execute(hosts, timeout, sem))
+    loop.run_until_complete(execute(hosts, timeout, sem, active_hosts))
+    if(len(active_hosts)>0):
+        for active_host in active_hosts:
+            print (active_host)
+    else:
+        print("No active host found")
 
     print("--- %s seconds ---" % (time.time() - start_time))
 
