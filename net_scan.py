@@ -81,6 +81,8 @@ def main():
     active_hosts=[]
     loop = asyncio.get_event_loop()
     loop.run_until_complete(execute(hosts, timeout, sem, active_hosts))
+
+    # printing active hosts on python console
     if(len(active_hosts)>0):
         for active_host in active_hosts:
             print (active_host)
